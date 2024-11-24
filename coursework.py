@@ -15,6 +15,8 @@ import numpy.random as rn
 from itertools import product
 from pandas.core.common import flatten
 
+import matplotlib.pyplot as plt
+
 alphabet = "abcdefghijklmnopqrstuvwxyz01234567890 .,\n"
 digits = "0123456789"
 
@@ -70,9 +72,10 @@ def parity_matrix(m : int) -> np.ndarray:
       m-by-n parity check matrix
     """
     matrix_rows = []
+    n = 2**m - 1
 
-    # generate binary encodings for each number in n (with n=number of matrix columns)
-    n_binary_encodings = [np.binary_repr(i, width=m) for i in range(1,2**m)]
+    # generate binary representation of each number <= n (with n=number of matrix columns)
+    n_binary_encodings = [np.binary_repr(i+1, width=m) for i in range(n)]
     n_binary_encodings = [[int(c[i]) for i in range(m)] for c in n_binary_encodings]
 
     for i in range(m-1, -1, -1):
@@ -92,15 +95,13 @@ def hamming_generator(m : int) -> np.ndarray:
       k-by-n generator matrix
     """
     H = parity_matrix(m)
-
     k = (2**m) - m - 1
 
     transpose_rows = []
-    parity_bit_positions = [((2**i)-1) for i in range(m)]
-    parity_idx = 0
 
+    parity_bit_positions = [((2**i)-1) for i in range(m)]
     identity_k = np.identity(k)
-    identity_idx = 0
+    identity_idx = parity_idx = 0
 
     for row_idx in range(k+m): 
       row = []
@@ -111,7 +112,7 @@ def hamming_generator(m : int) -> np.ndarray:
             row.append(parity_bits_from_H[bit])
         parity_idx += 1
       else:
-        row = [int(item) for item in identity_k[identity_idx].tolist()]
+        row = [int(identity_row) for identity_row in identity_k[identity_idx].tolist()]
         identity_idx += 1
 
       transpose_rows.append(row)
@@ -119,21 +120,6 @@ def hamming_generator(m : int) -> np.ndarray:
     G = np.array(transpose_rows).T
 
     return G
-
-
-# Additional function to help with encoding
-def find_parity_bits(data):
-    """ Finds how many parity bits are needed to encode the data.
-
-    data : np.ndarray
-      array of shape (k,) with the block of bits to encode
-
-    """
-    m = 0
-    k = len(data)
-    while k > 2**m-m-1:
-      m += 1
-    return m
 
 
 def hamming_encode(data : np.ndarray, m : int) -> np.ndarray:
@@ -154,23 +140,6 @@ def hamming_encode(data : np.ndarray, m : int) -> np.ndarray:
 
     return t
 
-# Additional function to help with bite flipping
-def flip_bit(data, pos) -> np.ndarray:
-    """ Flip one bite od the binary data array at the given position.
-
-    data : np.ndarray
-      array of shape (n,) with the block of bits to encode
-
-    pos : int
-      The index position of the bite to flip
-
-    return : np.ndarray
-      data with one bit flipped
-    """
-    assert (0 <= pos < len(data)), f"Position {pos} is out of range for data of length {len(data)}"
-    
-    data[pos] = int(not data[pos])
-    return data
 
 def hamming_decode(code : np.ndarray, m : int) -> np.ndarray:
     """
@@ -207,28 +176,6 @@ def hamming_decode(code : np.ndarray, m : int) -> np.ndarray:
     return decoded_string
 
 
-# Additional function to help with text decoding
-def is_valid_text(decoded_string) -> bool:
-  """ Checks if the decoded string is a valid English text.
-
-  decoded_string : str
-    The decoded string to check
-  """
-  alphabet_chars = [c[0] for c in alphabet]
-
-  if len(decoded_string) < 1:
-    return False
-
-  test_word = decoded_string[:10]
-  for c in test_word:
-    c = str(c)
-    if c not in alphabet_chars[26:]:
-      if c.lower() not in alphabet_chars[:26]:
-        return False
-      
-  return True
-
-
 def decode_secret(msg : np.ndarray) -> str:
     """
     msg : np.ndarray
@@ -237,11 +184,16 @@ def decode_secret(msg : np.ndarray) -> str:
     return : str
       String with decoded text
     """    
+    # since I assume every character of the secret message has been
+    # encoded with at least 8 bits (followning the text2bit function above)
+    # the number of parity bits needed for each character is 4
+    # thus encoded with Hamming (11,4)
+    # m = 4 <-- Your guess goes here
 
-    # m = np.nan  # 5 <-- Your guess goes here
     decoded_msg = {}
     for m in range(1,11): # try values up to 10
       n = 2**m - 1
+      k = n - m
       if len(msg) % n == 0:
         # print(f"m={m}, n={n}")
         decoded_string = []
@@ -252,7 +204,8 @@ def decode_secret(msg : np.ndarray) -> str:
           start = i*n
           end = start + n
           codeword = msg[start:end].copy()
-          decoded_string.append((hamming_decode(codeword, m)).tolist())
+          source_string = hamming_decode(codeword, m).tolist()
+          decoded_string.append(source_string)
           i += 1
           if end == len(msg): 
             done = True
@@ -261,12 +214,12 @@ def decode_secret(msg : np.ndarray) -> str:
         # print(f"m={m} not valid")
         continue
         
-    for k in decoded_msg.keys():
+    for m in decoded_msg.keys():
       try:
-        string_code = np.array(decoded_msg[k]).flatten()
+        string_code = np.array(decoded_msg[m]).flatten()
         decoded_secret = bits2text(string_code)
         if is_valid_text(decoded_secret):
-          print(f"m={k} valid\n")
+          print(f"Decoded with m={m}:\n")
           return decoded_secret
       except:
         continue
@@ -284,27 +237,13 @@ def binary_symmetric_channel(data : np.ndarray, p : float) -> np.ndarray:
     return : np.ndarray
       data with a number of bits flipped
     """
-    flipped_data = np.zeros_like(data)
+    flipped_data = np.copy(data)
     for pos in range(len(data)):
           if np.random.rand() <= p:
-              flipped_data[pos] = int(not data[pos])
-          else: 
-              flipped_data[pos] = data[pos]
+              flipped_data = flip_bit(flipped_data, pos)
 
     return flipped_data
 
-def create_random_codewords(n : int, num : int) -> list:
-   """
-    n : int
-      length of codewords to generate
-    num : int
-      number of codewords to generate
-
-    return : list
-      list of generated codewords
-    """
-   codewords = [np.random.randint(0,2,n) for _ in range(num)]
-   return codewords
 
 def decoder_accuracy(m : int, p : float) -> float:
     """
@@ -317,6 +256,146 @@ def decoder_accuracy(m : int, p : float) -> float:
       The probability of messages being correctly decoded with this
       Hamming code, using the noisy channel of probability p
     """
+    num_of_codewords = accuracy = 1000
+    codewords = create_random_codewords(num_of_codewords, m)
+    for code in codewords:
+      encoded_code = hamming_encode(code, m)
+      noisy_code = binary_symmetric_channel(encoded_code, p)
+      decoded_code = hamming_decode(noisy_code, m)
+      if not np.array_equal(code, decoded_code):
+        accuracy -= 1
 
-    raise NotImplementedError
 
+    return accuracy/num_of_codewords
+
+
+### Below are additional functions added in addition
+### to the required functions for the coursework
+
+# Additional function to help with encoding
+def find_parity_bits(data : np.ndarray):
+    """ 
+    data : np.ndarray
+      array of shape (k,) with the block of bits to encode
+
+    return : int
+      number of parity bits needed for the given data block
+    """
+    m = 0
+    k = len(data)
+    while k > 2**m-m-1:
+      m += 1
+    return m
+
+
+# Additional function to help with bite flipping
+def flip_bit(data : np.ndarray, pos : int) -> np.ndarray:
+    """ 
+    data : np.ndarray
+      array of shape (n,) with the encoded block of bits
+
+    pos : int
+      The index position of the bite to flip.
+      If it is equal to -1, a random index is choosen.
+
+    return : np.ndarray
+      data with one bit flipped
+    """
+    assert (-1 <= pos < data.size), f"Position {pos} is out of range for data of length {len(data)}"
+
+    if pos == -1:
+      pos = np.random.randint(0, data.size)
+    data[pos] = int(not data[pos])
+    
+    return data
+
+
+# Additional function for string to numpy conversion
+def string_to_numpy(s : str):
+    """
+      s : str
+        string sequence of 0 and 1
+      
+      return : np.ndarray
+        numpy array of 0 and 1 equivalent to s
+    """
+    np_s = np.ndarray(len(s))
+    for i in range(len(s)):
+      np_s[i]=(int(s[i]))
+    return np_s
+
+
+# Additional function for random codeword generation
+def generate_binary_strings(k : int) -> list:
+    """
+      k : int
+        number of bits in each string
+
+      return : list
+        list of generated binary strings
+    """
+    codewords = []
+    for i in range(2**k):
+      bin = format(i, '0' + str(k) + 'b')
+      codewords.append(string_to_numpy(bin))
+
+    return codewords
+
+
+# Additional function for block code codeword generation
+def get_block_codewords(n : int, k : int) -> list:
+    """
+      n : int
+        length of each codeword
+      k : int
+        number of data bits 
+
+      return : list
+        list of all possible codewords for this code block
+    """
+    m = n - k
+    binary_strings = generate_binary_strings(k)
+    block_code = []
+    for s in binary_strings:
+        block_code.append(hamming_encode(s,m))
+
+    return block_code
+   
+
+# Additional function to help with text decoding
+def is_valid_text(decoded_string : str) -> bool:
+    """ Checks if the decoded string is a valid English text.
+
+    decoded_string : str
+      The decoded string to check
+    """
+    alphabet_chars = [c[0] for c in alphabet]
+
+    if len(decoded_string) < 1:
+      return False
+
+    test_word = decoded_string[:10]
+    for c in test_word:
+      c = str(c)
+      if c not in alphabet_chars[26:]:
+        if c.lower() not in alphabet_chars[:26]:
+          return False
+        
+    return True
+
+
+# Additional function for radnom codeword generation
+def create_random_codewords(num : int, m : int) -> list:
+    """
+      num : int
+        number of codewords to generate
+      m : int
+        number of parity bits to use in the Hamming code (needed
+        to calculate codeword lenght)
+
+      return : list
+        list of generated codewords
+      """
+    k = 2**m-m-1
+    codewords = [np.random.randint(0,2,k) for _ in range(num)]
+    return codewords
