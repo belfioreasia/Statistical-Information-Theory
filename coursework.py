@@ -100,8 +100,8 @@ def hamming_generator(m : int) -> np.ndarray:
     transpose_rows = []
 
     parity_bit_positions = [((2**i)-1) for i in range(m)]
-    identity_k = np.identity(k)
-    identity_idx = parity_idx = 0
+    identity_k = np.identity(k) # for columns in position of parity bits
+    identity_idx = parity_idx = 0 
 
     for row_idx in range(k+m): 
       row = []
@@ -184,17 +184,18 @@ def decode_secret(msg : np.ndarray) -> str:
     return : str
       String with decoded text
     """    
-    # since I assume every character of the secret message has been
+    # Since I assume every character of the secret message has been
     # encoded with at least 8 bits (followning the text2bit function above)
     # the number of parity bits needed for each character is 4
-    # thus encoded with Hamming (11,4)
+    # based on 2^m - 1 >= 8, m >= log2(9) >> m = 4, i.e. 4 is the minimum
+    # number of parity bits needed to encode 8 bits. Therefore
+    # the original message should've been encoded with Hamming (11,4)
     # m = 4 <-- Your guess goes here
 
     decoded_msg = {}
-    for m in range(1,11): # try values up to 10
+    for m in range(1,11): # try possible m values up to 10
       n = 2**m - 1
-      k = n - m
-      if len(msg) % n == 0:
+      if len(msg) % n == 0: # to create chunks of n-sized codewords
         # print(f"m={m}, n={n}")
         decoded_string = []
         i = 0
@@ -214,6 +215,8 @@ def decode_secret(msg : np.ndarray) -> str:
         # print(f"m={m} not valid")
         continue
         
+    # assuming the secret message is in english, check
+    # if the decoded message is valid english text
     for m in decoded_msg.keys():
       try:
         string_code = np.array(decoded_msg[m]).flatten()
@@ -256,17 +259,16 @@ def decoder_accuracy(m : int, p : float) -> float:
       The probability of messages being correctly decoded with this
       Hamming code, using the noisy channel of probability p
     """
-    num_of_codewords = accuracy = 1000
+    num_of_codewords = correct_decodings = 10000 # random codewords
     codewords = create_random_codewords(num_of_codewords, m)
     for code in codewords:
       encoded_code = hamming_encode(code, m)
-      noisy_code = binary_symmetric_channel(encoded_code, p)
+      noisy_code = binary_symmetric_channel(encoded_code, p) # send through noisy channel
       decoded_code = hamming_decode(noisy_code, m)
       if not np.array_equal(code, decoded_code):
-        accuracy -= 1
+        correct_decodings -= 1 # track number of correctly decoded
 
-
-    return accuracy/num_of_codewords
+    return correct_decodings/num_of_codewords
 
 
 ### Below are additional functions added in addition
