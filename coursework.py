@@ -1,3 +1,6 @@
+# Statistical Information Theory Coursework
+# Belfiore Asia, cid: 02129867
+# November 24th, 2024, Imperial Collenge London
 """
 This file is part of Lab 4 (Hamming Codes), assessed coursework for the module
 COMP70103 Statistical Information Theory. 
@@ -222,7 +225,7 @@ def decode_secret(msg : np.ndarray) -> str:
         string_code = np.array(decoded_msg[m]).flatten()
         decoded_secret = bits2text(string_code)
         if is_valid_text(decoded_secret):
-          print(f"Decoded with m={m}:\n")
+          # print(f"Decoded with m={m}:\n")
           return decoded_secret
       except:
         continue
@@ -259,7 +262,8 @@ def decoder_accuracy(m : int, p : float) -> float:
       The probability of messages being correctly decoded with this
       Hamming code, using the noisy channel of probability p
     """
-    num_of_codewords = correct_decodings = 10000 # random codewords
+    # set to 10000 for plots
+    num_of_codewords = correct_decodings = 1000 # random codewords
     codewords = create_random_codewords(num_of_codewords, m)
     for code in codewords:
       encoded_code = hamming_encode(code, m)
